@@ -1,0 +1,118 @@
+*      Program CONV.PICK.DICTS
+*************************************************************************
+*
+*	Convert dictionary item(s) from Pick to UniVerse format:
+
+*	(c) Copyright 2012 Rocket Software Inc. - All Rights Reserved
+*
+*************************************************************************
+*	Maintenence log - insert most recent change descriptions at top
+*
+*	Date....	WHO		Description...........................................
+*   06-17-13    BYRNE	Now writes old saved dictionary items to the DICT
+*						portion of the new P_xxx file, so you can compare
+*   06-16-13    BYRNE	Shortened to use the same code for all correlative types
+*   06-15-13    BYRNE	Removed space between "\" for correlatives,
+*                   	otherwise it doesn't work
+*   06-15-13    BYRNE	Corrected the new dictionary entry to use attribute
+*						3 instead of 4, wasn't picking up column title
+*	10-01-12	NUNZ	Initial release
+*************************************************************************
+*
+**
+* Define Variables
+      PROMPT ''
+      CS = @(-1)
+      AT22 = @(0,22):SPACE(79):@(0,22)
+      AREC = ''
+      BREC = ''
+* Prompt for FILENAME
+1:    PRINT CS
+      PRINT @(25,1):"Convert PICK Style Dictionaries to UniVerse "
+      PRINT @(25,2):STR("-",43)
+      PRINT @(10,4):"Enter name of Dictionary File or 'E' to end: ": ; INPUT FILENAME
+      IF FILENAME = "E" THEN GOTO 9999
+**
+* Open Files
+	OPEN "DICT",FILENAME TO F.FILENAME ELSE
+		PRINT AT22:"Cannot Open File ":FILENAME:" Hit <enter> to Continue ":
+		INPUT RESP
+		STOP
+	END
+**
+* Create a Receiver File for the original PICK Dictionaries
+	EXECUTE "CREATE.FILE P_":FILENAME:" 18 2011 4"
+	OPEN "DICT","P_":FILENAME TO FP.FILENAME ELSE
+		PRINT AT22:"Cannot Open File ":FILENAME:" Hit <enter> to Continue ":
+		INPUT RESP
+		STOP
+	END
+
+	**
+	* Update to use the same data portion
+	OPEN "VOC" TO FP.VOC THEN
+		READ REC.MAIN FROM FP.VOC, FILENAME THEN
+			READ REC.NEW FROM FP.VOC, "P_":FILENAME THEN
+				REC.NEW<2> = REC.MAIN<2>
+				WRITE REC.NEW TO FP.VOC, "P_":FILENAME
+			END
+		END
+	ELSE
+		PRINT AT22:"Cannot Open VOC file - Hit <enter> to Continue ":
+		INPUT RESP
+		STOP
+	END
+	  
+	* Execute Select
+    EXECUTE "SSELECT DICT ":FILENAME:" BY @ID "
+**
+10:   READNEXT ID ELSE GOTO 999
+**
+      READ AREC FROM F.FILENAME,ID ELSE
+         GOTO 10
+      END
+* Check for type of Dictionary
+	CTYPES = "A|F|S|T|("
+	C = INDEX(CTYPES, AREC<8>[1,1], 1)
+	BEGIN CASE
+		CASE NUM(AREC<2>) AND AREC<8> = ''
+			* Create a "D" type
+			BREC<1> = "D"
+			BREC<2> = AREC<2>
+			BREC<3> = AREC<7>
+			BREC<4> = AREC<3>
+			BREC<5> = AREC<10>:AREC<9>
+			BREC<6> = "S"
+			BREC<7> = ""
+			WRITE BREC ON F.FILENAME,ID
+			WRITE AREC ON FP.FILENAME,ID
+			PRINT ID:"  **** Converted ****"
+			AREC = ''
+			GOTO 10
+		CASE C > 0
+		* Correlative found, create an "I" type
+			BREC = ''
+			BREC<1> = "I"
+			BREC<2> = "ICONV(@ID, \":AREC<8>:"\ )"
+			BREC<3> = AREC<7>
+			BREC<4> = AREC<3>
+			BREC<5> = AREC<10>:AREC<9>
+			BREC<6> = "S"
+			BREC<7> = ""
+			WRITE BREC ON F.FILENAME,ID
+			WRITE AREC ON FP.FILENAME,ID
+			PRINT ID:"  **** Converted **** "
+			AREC = ''
+            GOTO 10
+		CASE 1
+			PRINT ID:"  **** Not Converted ****"
+			GOTO 10
+	END CASE
+999:* Start a COMO to review COMPILE.DICT ressults
+	CLOSE FP.FILENAME
+	CLOSE FP.VOC
+	EXECUTE "COMO ON ":FILENAME
+	EXECUTE "CD ":FILENAME
+	EXECUTE "COMO OFF ":FILENAME
+9999 STOP
+   END
